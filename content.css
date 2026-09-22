@@ -23,8 +23,8 @@ html.ytds-active .caption-window {
   /* Shrink-wrap the text instead of spanning 92% of the player: a wide box put
      the drag grip (anchored to the box corner) half a player-width away from
      the subtitle it belongs to. The cap keeps the old wrapping measure. */
-  width: max-content;
-  max-width: min(92%, 1100px);
+  width: 96%;
+  max-width: none;
 }
 
 /* preset anchors (used when posMode === "preset") */

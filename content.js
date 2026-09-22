@@ -291,9 +291,9 @@
   let cueTlangStatus = 0;       // why THIS track has no whole-track translation
                                 // (0 = it does / never asked, 429 = rate limit)
   let pendingTimer = null;      // delayed "…" placeholder for the active group
-  const PAUSE_BREAK_MS = 600;   // word-level silence that ends a sentence
-  const MAX_GROUP_WORDS = 32;   // sentence cap (space-separated word count)
-  const MAX_GROUP_CHARS = 280;  // second cap: CJK sources (no spaces) + URL safety
+  const PAUSE_BREAK_MS = 2500;   // word-level silence that ends a sentence
+  const MAX_GROUP_WORDS = 50;   // sentence cap (space-separated word count)
+  const MAX_GROUP_CHARS = 400;  // second cap: CJK sources (no spaces) + URL safety
   const PREFETCH_GROUPS = 4;    // ~28s lookahead at the measured ~7s/group
   const GTX_FALLBACK_FAILS = 3; // network failures before auto falls back to tlang
   const PENDING_ELLIPSIS_MS = 400; // show "…" if the active group is still in flight
@@ -3973,7 +3973,17 @@
     activeGroupIdx = (cueToGroup && cueToGroup[idx] != null) ? cueToGroup[idx] : -1;
 
     const cue = cueList[idx];
-    setOriginal(cue.text);
+
+    // CUSTOM: show the full reconstructed sentence for the whole group
+    // instead of the current fragmented YouTube cue.
+    const displayOriginal =
+      activeGroupIdx >= 0 &&
+      sentGroups &&
+      sentGroups[activeGroupIdx]
+        ? sentGroups[activeGroupIdx].text
+        : cue.text;
+
+    setOriginal(displayOriginal);
     renderTranslationForCue(idx, cue);
     prefetchFrom(idx);                    // warm upcoming translations (gtx mode)
     // How far into this line the playhead already was when the line became the
@@ -4022,6 +4032,25 @@
 
   function renderTranslationForCue(idx, cue) {
     const origText = cue.text;
+
+    // CUSTOM: whenever Smart Sentence grouping exists, always translate and
+    // display the SAME complete sentence as the English line.
+    if (
+      activeGroupIdx >= 0 &&
+      sentGroups &&
+      sentGroups[activeGroupIdx]
+    ) {
+      const group = sentGroups[activeGroupIdx];
+      const key = groupKey(activeGroupIdx);
+      const cached = transCache.get(key);
+
+      if (cached !== undefined) {
+        setTranslation(cached === "" ? sameLangLine(group.text) : cached, group.text);
+      } else {
+        gtxRequestGroup(activeGroupIdx, true);
+      }
+      return;
+    }
 
     // (0) same-language track (flagged by inject.js): nothing to translate.
     // The text already sits on the original line; when that line is hidden,
@@ -4503,8 +4532,14 @@
     // auto on an ASR track, or a failed tlang fetch). aligned true/false means
     // the tlang paths render — groups stay dormant (null). A same-language
     // track never translates at all, so it never needs groups either.
-    if (cueAligned == null && !cueSameLang) buildSentenceGroups(cueList);
-    else { sentGroups = null; cueToGroup = null; }
+    // CUSTOM: always build sentence groups for translated tracks.
+    // We want full-sentence display even when YouTube provides aligned translations.
+    if (!cueSameLang) {
+      buildSentenceGroups(cueList);
+    } else {
+      sentGroups = null;
+      cueToGroup = null;
+    }
     // The voice's own grouping, for the case above: YouTube's translation on a
     // scrolling ASR track. Same sentence detection, different consumer — only
     // the read-aloud path ever looks at it.
